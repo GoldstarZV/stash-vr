@@ -49,11 +49,12 @@ func classifyIncomingTags(ctx context.Context, tags []tagDto) incomingTags {
 		if key == "" {
 			continue
 		}
-		// A rating is only ever set on markers we sent out (it carries the
-		// Stash marker id), so it wins over every legend match: a marker whose
-		// primary tag happens to be named "O" or "Studio" must survive the
+		// A positive rating carries the Stash marker id, so it wins over
+		// every legend match. Zero is not an ID and must not let new tags
+		// bypass metadata classification. A marker whose primary tag
+		// happens to be named "O" or "Studio" must survive the
 		// round trip, or UpdateMarkers would destroy it.
-		if t.Rating != nil {
+		if t.Rating != nil && *t.Rating > 0 {
 			in.markers = append(in.markers, newMarker(key, arg, t))
 			continue
 		}
@@ -76,7 +77,16 @@ func classifyIncomingTags(ctx context.Context, tags []tagDto) incomingTags {
 			continue
 		}
 		if strings.HasPrefix(key, internal.LegendTag) {
-			if key == internal.LegendTag && arg != "" && arg[0] != '#' {
+			// Parent/ancestor metadata is exported with negative times. A
+			// visible #name is a marker, including a point at time zero;
+			// only the exact #: prefix denotes a scene tag. Scene tag names
+			// may themselves start with #, e.g. #:#Boy/Girl.
+			if t.Start < 0 || (t.End != nil && *t.End < 0) {
+				continue
+			}
+			if key != internal.LegendTag {
+				in.markers = append(in.markers, newMarker(key, arg, t))
+			} else if arg != "" {
 				in.tags = append(in.tags, arg)
 			}
 			continue

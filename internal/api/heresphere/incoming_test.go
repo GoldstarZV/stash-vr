@@ -102,3 +102,75 @@ func TestClassify_MarkerNamedLikeALegendKeepsItsId(t *testing.T) {
 		t.Fatal("untagged legend must still be classified as metadata")
 	}
 }
+
+func TestClassify_HashMarkers(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		tag                tagDto
+		primary, title, id string
+	}{
+		{"new titled marker", tagDto{Name: "##marker:TESTZ", Start: 12000, End: util.Ptr(30000.0)}, "##marker", "TESTZ", "0"},
+		{"new point marker", tagDto{Name: "#MVR", Start: 15000}, "#MVR", "", "0"},
+		{"point at zero", tagDto{Name: "#MVR"}, "#MVR", "", "0"},
+		{"zero rating", tagDto{Name: "##marker:TESTZ", Start: 12000, Rating: util.Ptr(float32(0))}, "##marker", "TESTZ", "0"},
+		{"existing marker", tagDto{Name: "##marker:TESTZ", Start: 12000, Rating: util.Ptr(float32(42))}, "##marker", "TESTZ", "42"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := classifyIncomingTags(context.Background(), []tagDto{tc.tag})
+			if len(in.markers) != 1 || len(in.tags) != 0 {
+				t.Fatalf("expected only one marker, got %+v", in)
+			}
+			m := in.markers[0]
+			if m.PrimaryTagName != tc.primary || m.Title != tc.title || m.MarkerId != tc.id || m.StartSecond != tc.tag.Start/1000 {
+				t.Fatalf("unexpected marker %+v", m)
+			}
+			if tc.tag.End == nil {
+				if m.EndSecond != nil {
+					t.Fatal("point marker acquired an end time")
+				}
+			} else if m.EndSecond == nil || *m.EndSecond != *tc.tag.End/1000 {
+				t.Fatalf("incorrect end time: %+v", m.EndSecond)
+			}
+		})
+	}
+}
+
+func TestClassify_HashSceneTagsAndHiddenHierarchy(t *testing.T) {
+	in := classifyIncomingTags(context.Background(), []tagDto{
+		{Name: "#:#Boy/Girl"},
+		{Name: "#:vr"},
+		{Name: "#Category:vr", Start: -1, End: util.Ptr(-1.0)},
+		{Name: "#:#Category", Start: -1, End: util.Ptr(-1.0)},
+		{Name: "##marker:hidden", Start: -1, End: util.Ptr(-1.0)},
+		{Name: "#:"},
+	})
+	if len(in.markers) != 0 || len(in.tags) != 2 || in.tags[0] != "#Boy/Girl" || in.tags[1] != "vr" {
+		t.Fatalf("visible scene tags must survive without promoting hidden hierarchy tags: %+v", in)
+	}
+}
+
+func TestClassify_Issue94MetadataWithZeroRating(t *testing.T) {
+	// HereSphere may include rating:0 on new tags. Zero is not a Stash
+	// marker ID and must not bypass metadata classification.
+	for _, rating := range []*float32{nil, util.Ptr(float32(0))} {
+		in := classifyIncomingTags(context.Background(), []tagDto{
+			{Name: "P:37", Start: 0, End: util.Ptr(903000.0), Rating: rating},
+			{Name: "P:38", Start: 0, End: util.Ptr(3613000.0), Rating: rating},
+			{Name: "P:39", Start: 0, End: util.Ptr(3613000.0), Rating: rating},
+			{Name: "O:0", Start: 903000, End: util.Ptr(1806000.0), Rating: rating},
+			{Name: "Org:false", Start: 1806000, End: util.Ptr(2710000.0), Rating: rating},
+			{Name: "movie:movie", Start: 2710000, End: util.Ptr(3613000.0), Rating: rating},
+			{Name: "Performer:Example", Start: 1, End: util.Ptr(3613000.0), Rating: rating},
+			{Name: "@:Example", Rating: rating},
+			{Name: "Played:39", Rating: rating},
+			{Name: "O-Count:0", Rating: rating},
+			{Name: "Organized:false", Rating: rating},
+			{Name: "Rating:80", Rating: rating},
+			{Name: "#:vr", Rating: rating},
+			{Name: "#Category:vr", Start: -1, End: util.Ptr(-1.0), Rating: rating},
+		})
+		if len(in.markers) != 0 || len(in.tags) != 1 || in.tags[0] != "vr" || !in.hasPlayCount || !in.hasOCount || !in.hasOrganized || !in.hasRating {
+			t.Fatalf("metadata with rating %v was misclassified: %+v", rating, in)
+		}
+	}
+}

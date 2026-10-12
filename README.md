@@ -88,13 +88,12 @@ Scene metadata is handled using `Video Tags` in HereSphere. Both for presentatio
   * To tag a scene, create a tag in HereSphere following above format.
     * `#:Music` will apply the tag `Music`, creating it if necessary.
   * To untag a scene, delete the tag in HereSphere.
-  * Name may not start with `#`
-    * ~~`#:#Music`~~
+  * Names may start with `#`: `#:#Music` applies the scene tag `#Music`.
 * Parent tags
   * `#<Parent>:<Name>` - read-only.
   * Hidden in tag editor, visible in categorized tags under category `#<Parent>`
 * Ancestor tags
-  * `#:#<Name>` - read-only
+  * `#:#<Name>` - read-only when exported as a hidden ancestor tag
   * Hidden in tag editor, visible in categorized tags under `#` as `#<Name>`
 * Summary tag
   * `Summary:<SUMMARY>` - read-only
@@ -129,6 +128,9 @@ Scene metadata is handled using `Video Tags` in HereSphere. Both for presentatio
   * `<Primary Tag Name>:<Title>`
     * `Music:Solo` will create marker with tag `Music` and title `Solo` spanning HereSphere tag length
   * Set the start and end time using HereSphere controls.
+  * Primary tag names may start with `#`: `##marker:TESTZ` creates a marker
+    with primary tag `##marker` and title `TESTZ`; `#MVR` creates one with
+    primary tag `#MVR`. These also work as point markers at time zero.
   * Changes in HereSphere will sync to Stash
 
 Changes reflect in HereSphere when videos are re-opened.
